@@ -26,7 +26,7 @@ with open('dev-requirements.txt') as dev_requirements_file:
 
 
 setup(
-    name='sopel_modules.se_tag_monitor',
+    name='sopel_modules.stackexchange',
     version='0.1.0',
     description='Post questions posted to Stack Exchange by tag',
     long_description=readme + '\n\n' + history,
