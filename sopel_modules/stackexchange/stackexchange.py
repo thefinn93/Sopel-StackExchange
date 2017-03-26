@@ -7,6 +7,7 @@ from sopel import module
 import json
 import logging
 import requests
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,12 @@ def configure(config):
     config.stackexchange.configure_setting('key', "What is your StackExchange App's Key?")
 
 
+def has_write_access(bot, trigger):
+    if trigger.admin:
+        return True
+    return bot.privileges[trigger.sender].get(trigger.nick, 0) > 0
+
+
 def get_subscriptions(bot, sender):
     current = bot.db.get_channel_value(sender, 'stackexchange_subscriptions')
     if current is None:
@@ -39,6 +46,8 @@ def get_subscriptions(bot, sender):
 
 
 def subscribe(bot, trigger):
+    if not has_write_access(bot, trigger):
+        return "Must be admin or channel op!"
     site = trigger.group(4)
     tag = trigger.group(5)
     logger.info("Subscription request from %s for %s on %s", trigger.sender, tag, site)
@@ -51,13 +60,15 @@ def subscribe(bot, trigger):
         current[site].append(tag)
         bot.db.set_channel_value(trigger.sender, 'stackexchange_subscriptions', json.dumps(current))
         for db_key, question in get_questions(bot, trigger.sender):
-            bot.db.set_channel_value(trigger.sender, db_key, True)
+            bot.db.set_channel_value(trigger.sender, db_key, time.time())
         return "Subscribed %s to %s on %s" % (trigger.sender, tag, site)
     else:
         return "%s is already subscribed to %s on %s" % (trigger.sender, tag, site)
 
 
 def unsubscribe(bot, trigger):
+    if not has_write_access(bot, trigger):
+        return "Must be admin or channel op!"
     site = trigger.group(4)
     tag = trigger.group(5)
     logger.info("Unsubscribe request from %s for %s on %s", trigger.sender, tag, site)
@@ -130,7 +141,7 @@ def check(bot):
             answered = " [Answered]" if question.get("answered") else ""
             msg = "%s [%s]%s" % (question.get("title"), link, answered)
             bot.msg(channel, msg)
-            bot.db.set_channel_value(channel, db_key, True)
+            bot.db.set_channel_value(channel, db_key, time.time())
 
 
 @module.commands('stackexchange')
