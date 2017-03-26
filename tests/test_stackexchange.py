@@ -4,9 +4,10 @@ from __future__ import unicode_literals, absolute_import, division, print_functi
 
 import unittest
 
-from sopel_modules.se_tag_monitor import se_tag_monitor
+from sopel_modules.stackexchange import stackexchange
 
-class TestSe_tag_monitor(unittest.TestCase):
+
+class TestStackExchange(unittest.TestCase):
     def setUp(self):
         pass
 
