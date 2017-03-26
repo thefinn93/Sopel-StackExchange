@@ -50,6 +50,8 @@ def subscribe(bot, trigger):
     if tag not in current[site]:
         current[site].append(tag)
         bot.db.set_channel_value(trigger.sender, 'stackexchange_subscriptions', json.dumps(current))
+        for db_key, question in get_questions(bot, trigger.sender):
+            bot.db.set_channel_value(trigger.sender, db_key, True)
         return "Subscribed %s to %s on %s" % (trigger.sender, tag, site)
     else:
         return "%s is already subscribed to %s on %s" % (trigger.sender, tag, site)
@@ -88,40 +90,46 @@ def shorten(link):
     return "/".join(link[:-1])
 
 
+def get_questions(bot, channel):
+    out = []
+    subscriptions = get_subscriptions(bot, channel)
+    for site in subscriptions:
+        params = {
+            "order": "desc",
+            "sort": "creation",
+            "tagged": ";".join(subscriptions[site]),
+            "site": site,
+            "access_token": bot.config.stackexchange.token,
+            "key": bot.config.stackexchange.key
+        }
+        logger.info("Making request with params %s for %s", params, channel)
+        response = requests.get("%s/search" % API_BASE, params=params, headers=HEADERS)
+        if response.ok:
+            questions = response.json()
+            quota_remaining = questions.get("quota_remaining")
+            quota_max = questions.get("quota_max")
+            backoff = questions.get("backoff")
+            logger.debug("Got %s questions. %.d%% (%d/%d) of our quota remaining.%s",
+                         (len(questions.get("items"))), (quota_remaining/quota_max)*100, quota_remaining,
+                         quota_max, "%s second backoff" % backoff if backoff else "")
+            for question in questions.get("items", []):
+                db_key = "stackexchange-posted-%d" % question.get("question_id")
+                posted = bot.db.get_channel_value(channel, db_key)
+                if not posted:
+                    out.append((db_key, question))
+        else:
+            logger.warning("Request to StackExchange returned %s: %s", response.status_code, response.content)
+
+
 @module.interval(60)
 def check(bot):
     for channel in bot.channels:
-        subscriptions = get_subscriptions(bot, channel)
-        for site in subscriptions:
-            params = {
-                "order": "desc",
-                "sort": "creation",
-                "tagged": ";".join(subscriptions[site]),
-                "site": site,
-                "access_token": bot.config.stackexchange.token,
-                "key": bot.config.stackexchange.key
-            }
-            logger.info("Making request with params %s for %s", params, channel)
-            response = requests.get("%s/search" % API_BASE, params=params, headers=HEADERS)
-            if response.ok:
-                questions = response.json()
-                quota_remaining = questions.get("quota_remaining")
-                quota_max = questions.get("quota_max")
-                backoff = questions.get("backoff")
-                logger.debug("Got %s questions. %.d%% (%d/%d) of our quota remaining.%s",
-                             (len(questions.get("items"))), (quota_remaining/quota_max)*100, quota_remaining,
-                             quota_max, "%s second backoff" % backoff if backoff else "")
-                for question in questions.get("items", []):
-                    db_key = "stackexchange-posted-%d" % question.get("question_id")
-                    posted = bot.db.get_channel_value(channel, db_key)
-                    if not posted:
-                        link = shorten(question.get("link"))
-                        answered = " [Answered]" if question.get("answered") else ""
-                        msg = "%s [%s]%s" % (question.get("title"), link, answered)
-                        bot.msg(channel, msg)
-                        bot.db.set_channel_value(channel, db_key, True)
-            else:
-                logger.warning("Request to StackExchange returned %s: %s", response.status_code, response.content)
+        for db_key, question in get_questions(bot, channel):
+            link = shorten(question.get("link"))
+            answered = " [Answered]" if question.get("answered") else ""
+            msg = "%s [%s]%s" % (question.get("title"), link, answered)
+            bot.msg(channel, msg)
+            bot.db.set_channel_value(channel, db_key, True)
 
 
 @module.commands('stackexchange')
