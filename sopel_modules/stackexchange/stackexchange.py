@@ -119,6 +119,7 @@ def get_questions(bot, channel):
                     out.append((db_key, question))
         else:
             logger.warning("Request to StackExchange returned %s: %s", response.status_code, response.content)
+    return out
 
 
 @module.interval(60)
