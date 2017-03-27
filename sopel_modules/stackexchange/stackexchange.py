@@ -81,6 +81,8 @@ def unsubscribe(bot, trigger):
                                                                                             trigger.group(1))
     else:
         current[site].remove(tag)
+        if len(current[site]) == 0:
+            del current[site]
         bot.db.set_channel_value(trigger.sender, 'stackexchange_subscriptions', json.dumps(current))
         return "Unsubscribed %s from %s on %s" % (trigger.sender, tag, site)
 
